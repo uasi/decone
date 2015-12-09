@@ -1,0 +1,4 @@
+[package]
+name = "decone"
+version = "0.1.0"
+authors = ["Tomoki Aonuma <uasi@uasi.jp>"]
