@@ -35,9 +35,15 @@ fn export_attachments<'n, 'a>(_matches: &ArgMatches<'n, 'a>) {
 }
 
 fn list_attachments<'n, 'a>(_matches: &ArgMatches<'n, 'a>) {
-    let archive = attachment::Archive::with_keychain_path(get_default_keychain_path());
-    for attachment in archive.attachments() {
-        println!("{} {}", attachment.uuid(), attachment.metadata().file_name());
+    match attachment::Archive::with_keychain_path(get_default_keychain_path()) {
+        Ok(archive) => {
+            for attachment in archive.attachments() {
+                println!("{} {}", attachment.uuid(), attachment.metadata().file_name());
+            }
+        }
+        Err(e) => {
+            println!("{:?}", e);
+        }
     }
 }
 

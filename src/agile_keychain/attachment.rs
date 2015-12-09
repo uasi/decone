@@ -1,6 +1,7 @@
 use serde_json;
 
 use std::fs;
+use std::io::{self, Result as IoResult};
 use std::path::{Path, PathBuf};
 
 const FILES_DIR_REL_PATH: &'static str = "a/default/files";
@@ -11,7 +12,7 @@ pub struct Archive {
 }
 
 impl Archive {
-    pub fn with_keychain_path<P: AsRef<Path>>(path: P) -> Self {
+    pub fn with_keychain_path<P: AsRef<Path>>(path: P) -> IoResult<Self> {
         let mut path_buf = path.as_ref().to_path_buf();
         path_buf.push(FILES_DIR_REL_PATH);
         Archive::new(&path_buf)
@@ -21,15 +22,15 @@ impl Archive {
         self.entries.iter().flat_map(|entry| entry.attachments.iter().cloned()).collect()
     }
 
-    fn new(path: &Path) -> Self {
+    fn new(path: &Path) -> IoResult<Self> {
         let mut entries = Vec::new();
-        for dir_entry in fs::read_dir(path).unwrap() {
-            let dir_entry = dir_entry.unwrap();
-            if fs::metadata(dir_entry.path()).unwrap().is_dir() {
-                entries.push(ArchiveEntry::new(&dir_entry.path()));
+        for dir_entry in try!(fs::read_dir(path)) {
+            let dir_entry = try!(dir_entry);
+            if try!(fs::metadata(dir_entry.path())).is_dir() {
+                entries.push(try!(ArchiveEntry::new(&dir_entry.path())));
             }
         }
-        Archive { entries: entries }
+        Ok(Archive { entries: entries })
     }
 }
 
@@ -40,19 +41,19 @@ pub struct ArchiveEntry {
 }
 
 impl ArchiveEntry {
-    fn new(path: &Path) -> Self {
+    fn new(path: &Path) -> IoResult<Self> {
         let uuid = path.file_name().expect("file name must not be empty").to_string_lossy().into_owned();
         let mut attachments = Vec::new();
-        for dir_entry in fs::read_dir(path).unwrap() {
-            let dir_entry = dir_entry.unwrap();
-            if fs::metadata(dir_entry.path()).unwrap().is_file() && dir_entry.path().extension() == None {
-                attachments.push(Attachment::new(&dir_entry.path()));
+        for dir_entry in try!(fs::read_dir(path)) {
+            let dir_entry = try!(dir_entry);
+            if try!(fs::metadata(dir_entry.path())).is_file() && dir_entry.path().extension() == None {
+                attachments.push(try!(Attachment::new(&dir_entry.path())));
             }
         }
-        ArchiveEntry {
+        Ok(ArchiveEntry {
             uuid: uuid,
             attachments: attachments,
-        }
+        })
     }
 }
 
@@ -72,14 +73,14 @@ impl Attachment {
         &self.metadata
     }
 
-    fn new(path: &Path) -> Self {
+    fn new(path: &Path) -> IoResult<Self> {
         let uuid = path.file_name().expect("file name must not be empty").to_string_lossy().into_owned();
-        let metadata = Metadata::new(&Attachment::get_metadata_file_path(path));
-        Attachment {
+        let metadata = try!(Metadata::new(&Attachment::get_metadata_file_path(path)));
+        Ok(Attachment {
             uuid: uuid,
             path: path.to_path_buf(),
             metadata: metadata,
-        }
+        })
     }
 
     fn get_metadata_file_path(path: &Path) -> PathBuf {
@@ -101,13 +102,40 @@ impl Metadata {
         &self.file_name
     }
 
-    fn new(path: &Path) -> Self {
-        let file = fs::File::open(path).expect("file must be readable");
-        let value: serde_json::Value = serde_json::de::from_reader(file).expect("file must be readable");
-        Metadata {
-            encryption_key_uuid: value.find("encryptionKey").unwrap().as_string().unwrap().into(),
-            file_name: value.find("filename").unwrap().as_string().unwrap().into(),
-            encrypted: value.find("encrypted").unwrap().as_boolean().unwrap(),
-        }
+    fn new(path: &Path) -> IoResult<Self> {
+        let file = try!(fs::File::open(path));
+        let value = serde_json::de::from_reader(file)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e));
+        let value: serde_json::Value = try!(value);
+
+        Ok(Metadata {
+            encryption_key_uuid: try!(value.retrieve("encryptionKey", |v| v.as_owned_string())),
+            file_name: try!(value.retrieve("filename", |v| v.as_owned_string())),
+            encrypted: try!(value.retrieve("encrypted", |v| v.as_boolean())),
+
+        })
+    }
+}
+
+trait JsonValueExt {
+    fn as_owned_string(&self) -> Option<String>;
+    fn retrieve<T, F>(&self, key: &str, mapper: F) -> IoResult<T>
+        where F: FnOnce(&serde_json::Value) -> Option<T>;
+}
+
+impl JsonValueExt for serde_json::Value {
+    fn as_owned_string(&self) -> Option<String> {
+        self.as_string().and_then(|s| Some(s.to_string()))
+    }
+
+    fn retrieve<T, F>(&self, key: &str, mapper: F) -> IoResult<T>
+        where F: FnOnce(&serde_json::Value) -> Option<T>
+    {
+        self
+            .find(key)
+            .and_then(|value| mapper(value))
+            .ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, format!("could not retrieve {}", key))
+            })
     }
 }
