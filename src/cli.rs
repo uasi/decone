@@ -1,4 +1,8 @@
 use clap::{App, ArgMatches, SubCommand};
+use std::env;
+use std::path::PathBuf;
+
+use agile_keychain::attachment;
 
 pub struct Cli;
 
@@ -31,5 +35,14 @@ fn export_attachments<'n, 'a>(_matches: &ArgMatches<'n, 'a>) {
 }
 
 fn list_attachments<'n, 'a>(_matches: &ArgMatches<'n, 'a>) {
-    println!("Not yet implemented");
+    let archive = attachment::Archive::with_keychain_path(get_default_keychain_path());
+    for attachment in archive.attachments() {
+        println!("{} {}", attachment.uuid(), attachment.metadata().file_name());
+    }
+}
+
+const DEFAULT_KEYCHAIN_PATH: &'static str = "Dropbox/1Password/1Password.agilekeychain";
+
+fn get_default_keychain_path() -> PathBuf {
+    env::home_dir().expect("HOME must be set").join(DEFAULT_KEYCHAIN_PATH)
 }

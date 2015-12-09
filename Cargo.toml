@@ -5,3 +5,4 @@ authors = ["Tomoki Aonuma <uasi@uasi.jp>"]
 
 [dependencies]
 clap = "1.5.3"
+serde_json = "0.6.0"
