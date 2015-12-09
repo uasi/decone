@@ -2,3 +2,6 @@
 name = "decone"
 version = "0.1.0"
 authors = ["Tomoki Aonuma <uasi@uasi.jp>"]
+
+[dependencies]
+clap = "1.5.3"
