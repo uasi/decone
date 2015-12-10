@@ -44,3 +44,18 @@ impl LockedProfile {
 fn strip_js(s: &str) -> &str {
     s.trim_left_matches("var profile=").trim_right_matches(";")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::LockedProfile;
+
+    fn get_profile_file_path() -> &'static str {
+        "test/SampleVault.opvault/default/profile.js"
+    }
+
+    #[test]
+    fn test_from_file() {
+        let profile = LockedProfile::from_file(get_profile_file_path());
+        assert!(profile.is_ok());
+    }
+}
