@@ -4,5 +4,11 @@ version = "0.1.0"
 authors = ["Tomoki Aonuma <uasi@uasi.jp>"]
 
 [dependencies]
+base64 = "0.1.1"
 clap = "1.5.3"
 serde_json = "0.6.0"
+
+[dependencies.openssl]
+git = "https://github.com/uasi/rust-openssl"
+branch = "add-variations-of-pbkdf2"
+features = ["pkcs5_pbkdf2_hmac"]

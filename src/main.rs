@@ -1,5 +1,7 @@
+extern crate base64;
 #[macro_use(crate_version)]
 extern crate clap;
+extern crate openssl;
 extern crate serde_json;
 
 mod agile_keychain;
