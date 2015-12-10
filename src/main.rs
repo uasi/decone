@@ -4,6 +4,8 @@ extern crate serde_json;
 
 mod agile_keychain;
 mod cli;
+mod json_value_ext;
+mod op_vault;
 
 use cli::Cli;
 

@@ -3,6 +3,7 @@ use std::env;
 use std::path::PathBuf;
 
 use agile_keychain::attachment;
+use op_vault;
 
 pub struct Cli;
 
@@ -15,10 +16,15 @@ impl Cli {
         let crate_version = crate_version!();
         let app = App::new("decone")
             .version(&crate_version)
+            .subcommand(SubCommand::with_name("dump-profile")
+                        .arg_from_usage("<profile.js>"))
             .subcommand(SubCommand::with_name("export-attachments")
                         .arg_from_usage("-u --uuid=<uuid>"))
             .subcommand(SubCommand::with_name("list-attachments"));
         match app.get_matches_lossy().subcommand() {
+            ("dump-profile", Some(matches)) => {
+                dump_profile(matches);
+            }
             ("export-attachments", Some(matches)) => {
                 export_attachments(matches);
             }
@@ -27,6 +33,13 @@ impl Cli {
             }
             _ => {}
         }
+    }
+}
+
+fn dump_profile<'n, 'a>(matches: &ArgMatches<'n, 'a>) {
+    if let Some(path) = matches.value_of("profile.js") {
+        let profile = op_vault::profile::LockedProfile::from_file(path);
+        println!("{:?}", profile);
     }
 }
 
