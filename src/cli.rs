@@ -20,7 +20,9 @@ impl Cli {
                         .arg_from_usage("<profile.js>"))
             .subcommand(SubCommand::with_name("export-attachments")
                         .arg_from_usage("-u --uuid=<uuid>"))
-            .subcommand(SubCommand::with_name("list-attachments"));
+            .subcommand(SubCommand::with_name("list-attachments"))
+            .subcommand(SubCommand::with_name("list-folders")
+                        .arg_from_usage("<folders.js>"));
         match app.get_matches_lossy().subcommand() {
             ("dump-profile", Some(matches)) => {
                 dump_profile(matches);
@@ -30,6 +32,9 @@ impl Cli {
             }
             ("list-attachments", Some(matches)) => {
                 list_attachments(matches);
+            }
+            ("list-folders", Some(matches)) => {
+                list_folders(matches);
             }
             _ => {}
         }
@@ -56,6 +61,21 @@ fn list_attachments<'n, 'a>(_matches: &ArgMatches<'n, 'a>) {
         }
         Err(e) => {
             println!("{:?}", e);
+        }
+    }
+}
+
+fn list_folders<'n, 'a>(matches: &ArgMatches<'n, 'a>) {
+    if let Some(path) = matches.value_of("folders.js") {
+        match op_vault::folder::load_folder_map(path) {
+            Ok(map) => {
+                for folder in map.values() {
+                    println!("{:?}", folder);
+                }
+            }
+            Err(e) => {
+                println!("{:?}", e);
+            }
         }
     }
 }
