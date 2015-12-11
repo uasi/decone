@@ -98,7 +98,7 @@ fn unlock_vault<'n, 'a>(matches: &ArgMatches<'n, 'a>) {
     }
     let locked_vault = locked_vault.unwrap();
     print!("Enter password for vault: ");
-    io::stdout().flush();
+    let _ = io::stdout().flush();
     let password = rpassword::read_password().unwrap();
     if locked_vault.unlock(&password).is_some() {
         println!("Unlocked");

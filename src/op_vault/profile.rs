@@ -1,11 +1,10 @@
-use base64;
 use serde_json::{self, Value};
 use std::fs::File;
 use std::io::{self, Read, Result as IoResult};
 use std::path::Path;
 
 use json_value_ext::JsonValueExt;
-use op_vault::key::{DerivedKey, Key, MainKey};
+use op_vault::key::{DerivedKey, MainKey};
 use op_vault::op_data_01::OpData01;
 
 #[derive(Clone, Debug)]

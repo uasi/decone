@@ -2,7 +2,6 @@ use std::io::{Result as IoResult};
 use std::path::{Path, PathBuf};
 
 use op_vault::profile::{LockedProfile, Profile};
-use op_vault::key::{DerivedKey, Key, MainKey};
 
 const PROFILE_REL_PATH: &'static str = "default/profile.js";
 
