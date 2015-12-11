@@ -1,3 +1,5 @@
+#![allow(dead_code)] // until we release 0.1.0...
+
 extern crate base64;
 #[macro_use(crate_version)]
 extern crate clap;
