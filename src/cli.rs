@@ -1,4 +1,5 @@
 use clap::{App, ArgMatches, SubCommand};
+use rpassword;
 use std::env;
 use std::path::PathBuf;
 
@@ -22,7 +23,8 @@ impl Cli {
                         .arg_from_usage("-u --uuid=<uuid>"))
             .subcommand(SubCommand::with_name("list-attachments"))
             .subcommand(SubCommand::with_name("list-folders")
-                        .arg_from_usage("<folders.js>"));
+                        .arg_from_usage("<folders.js>"))
+            .subcommand(SubCommand::with_name("unlock-vault"));
         match app.get_matches_lossy().subcommand() {
             ("dump-profile", Some(matches)) => {
                 dump_profile(matches);
@@ -35,6 +37,9 @@ impl Cli {
             }
             ("list-folders", Some(matches)) => {
                 list_folders(matches);
+            }
+            ("unlock-vault", Some(matches)) => {
+                unlock_vault(matches);
             }
             _ => {}
         }
@@ -80,8 +85,31 @@ fn list_folders<'n, 'a>(matches: &ArgMatches<'n, 'a>) {
     }
 }
 
+fn unlock_vault<'n, 'a>(_matches: &ArgMatches<'n, 'a>) {
+    use std::io::{self, Write};
+    let locked_vault = op_vault::vault::LockedVault::new(get_sample_vault_path()).unwrap();
+    print!("Enter password for sample vault: ");
+    io::stdout().flush();
+    let password = rpassword::read_password().unwrap();
+    if locked_vault.unlock(&password).is_some() {
+        println!("Unlocked");
+    } else {
+        println!("Failed to unlock");
+    }
+}
+
 const DEFAULT_KEYCHAIN_PATH: &'static str = "Dropbox/1Password/1Password.agilekeychain";
 
 fn get_default_keychain_path() -> PathBuf {
     env::home_dir().expect("HOME must be set").join(DEFAULT_KEYCHAIN_PATH)
+}
+
+const SAMPLE_VAULT_PATH: &'static str = "test/SampleVault.opvault";
+
+fn get_sample_vault_path() -> PathBuf {
+    let mut path = PathBuf::from(file!());
+    path.pop();
+    path.pop();
+    path.push(SAMPLE_VAULT_PATH);
+    path
 }

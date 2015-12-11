@@ -6,6 +6,7 @@ authors = ["Tomoki Aonuma <uasi@uasi.jp>"]
 [dependencies]
 base64 = "0.1.1"
 clap = "1.5.3"
+rpassword = "0.1.0"
 serde_json = "0.6.0"
 
 [dependencies.openssl]

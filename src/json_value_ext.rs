@@ -1,3 +1,4 @@
+use base64;
 use serde_json;
 use std::io::{self, Result as IoResult};
 
@@ -6,6 +7,7 @@ use op_vault::op_data_01::OpData01;
 pub trait JsonValueExt {
     fn as_op_data_01(&self) -> Option<OpData01>;
     fn as_owned_string(&self) -> Option<String>;
+    fn decode_base64(&self) -> Option<Vec<u8>>;
     fn retrieve<T, F>(&self, key: &str, mapper: F) -> IoResult<T>
         where F: FnOnce(&serde_json::Value) -> Option<T>;
 }
@@ -17,6 +19,10 @@ impl JsonValueExt for serde_json::Value {
 
     fn as_owned_string(&self) -> Option<String> {
         self.as_string().and_then(|s| Some(s.to_string()))
+    }
+
+    fn decode_base64(&self) -> Option<Vec<u8>> {
+        self.as_string().and_then(|s| base64::u8de(s.as_bytes()).ok())
     }
 
     fn retrieve<T, F>(&self, key: &str, mapper: F) -> IoResult<T>
