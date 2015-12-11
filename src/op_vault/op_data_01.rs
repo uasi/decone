@@ -1,14 +1,83 @@
 use openssl::crypto::{hash, hmac, pkcs5, symm};
 
+const HEADER_LEN: usize = 8;
+const PLAINTEXT_LEN_LEN: usize = 8;
+const IV_LEN: usize = 16;
+const MAC_LEN: usize = 32;
+const MIN_OP_DATA_01_LEN: usize = HEADER_LEN + PLAINTEXT_LEN_LEN + IV_LEN + MAC_LEN;
+
+pub struct OpData01 {
+    bytes: Vec<u8>,
+    plaintext_len: usize,
+}
+
+impl OpData01 {
+    pub fn new(bytes: Vec<u8>) -> Option<Self> {
+        assert!(bytes.len() > MIN_OP_DATA_01_LEN);
+        if &bytes[0..HEADER_LEN] == b"opdata01" {
+            Some(OpData01::from_bytes_unchecked(bytes))
+        } else {
+            None
+        }
+    }
+
+    pub fn from_bytes_unchecked(bytes: Vec<u8>) -> Self {
+        let plaintext_len = u64_from_bytes_le(&bytes[8..16]);
+        OpData01 {
+            bytes: bytes,
+            plaintext_len: plaintext_len as usize,
+        }
+    }
+
+    pub fn plaintext_len(&self) -> usize {
+        self.plaintext_len
+    }
+
+    pub fn iv(&self) -> &[u8] {
+        let start = HEADER_LEN + PLAINTEXT_LEN_LEN;
+        let end = start + IV_LEN;
+        &self.bytes[start..end]
+    }
+
+    pub fn ciphertext(&self) -> &[u8] {
+        let start = HEADER_LEN + PLAINTEXT_LEN_LEN + IV_LEN;
+        let end = self.bytes.len().saturating_sub(MAC_LEN);
+        &self.bytes[start..end]
+    }
+
+    pub fn mac(&self) -> &[u8] {
+        let start = self.bytes.len().saturating_sub(MAC_LEN);
+        &self.bytes[start..]
+    }
+
+    pub fn validate(&self, key: &Key) -> bool {
+        let payload_end = self.bytes.len().saturating_sub(MAC_LEN);
+        let payload = &self.bytes[..payload_end];
+        key.compute_mac(payload) == self.mac()
+    }
+
+    pub fn decrypt(&self, key: &Key) -> Vec<u8> {
+        let padded_plaintext = key.decrypt_aes(self.iv(), &self.ciphertext());
+        let start = padded_plaintext.len().saturating_sub(self.plaintext_len());
+        padded_plaintext[start..].to_vec()
+    }
+}
+
 pub trait Key {
     fn enc_key(&self) -> &[u8];
     fn mac_key(&self) -> &[u8];
 
-    fn compute_mac(&self, op_data: &[u8]) -> Vec<u8> {
-        assert!(op_data.len() > 32); // TODO: make more bigger
-        let content_end = op_data.len().saturating_sub(32);
-        let content = &op_data[0..content_end];
-        hmac::hmac(hash::Type::SHA256, self.mac_key(), content)
+    fn compute_mac(&self, bytes: &[u8]) -> Vec<u8> {
+        hmac::hmac(hash::Type::SHA256, self.mac_key(), bytes)
+    }
+
+    fn decrypt_aes(&self, iv: &[u8], bytes: &[u8]) -> Vec<u8> {
+        let crypter = symm::Crypter::new(symm::Type::AES_256_CBC);
+        crypter.init(symm::Mode::Decrypt, self.enc_key(), iv);
+        crypter.pad(false);
+        let mut plaintext = crypter.update(bytes);
+        plaintext.extend(crypter.finalize());
+        plaintext
     }
 }
 
@@ -36,40 +105,12 @@ impl MainKey {
         }
     }
 
-    pub fn from_encrypted_data(key: &DerivedKey, op_data: &[u8]) -> Self {
-        let iv = &op_data[16..32];
-        let content_end = op_data.len().saturating_sub(32);
-        let content = &op_data[32..content_end];
-
-        let crypter = symm::Crypter::new(symm::Type::AES_256_CBC);
-        crypter.init(symm::Mode::Decrypt, key.enc_key(), iv);
-        crypter.pad(false);
-
-        let mut decrypted = crypter.update(content);
-        decrypted.extend(crypter.finalize());
-        decrypted = decrypted[16..].to_vec();
-
-        let bytes = hash::hash(hash::Type::SHA512, &decrypted);
+    pub fn from_op_data(key: &DerivedKey, op_data: &OpData01) -> Self {
+        let plaintext = op_data.decrypt(key);
+        let bytes = hash::hash(hash::Type::SHA512, &plaintext);
         let enc_key = bytes[0..32].to_vec();
         let mac_key = bytes[32..64].to_vec();
-
         MainKey::new(enc_key, mac_key)
-    }
-
-    fn decrypt(&self, op_data: &[u8]) -> Vec<u8> {
-        let plaintext_len = u64_from_bytes_le(&op_data[8..16]) as usize;
-        let iv = &op_data[16..32];
-        let content_end = op_data.len().saturating_sub(32);
-        let content = &op_data[32..content_end];
-
-        let crypter = symm::Crypter::new(symm::Type::AES_256_CBC);
-        crypter.init(symm::Mode::Decrypt, self.enc_key(), iv);
-        crypter.pad(false);
-
-        let mut decrypted = crypter.update(content);
-        decrypted.extend(crypter.finalize());
-        decrypted = decrypted[decrypted.len().saturating_sub(plaintext_len)..].to_vec();
-        decrypted
     }
 }
 
@@ -133,24 +174,32 @@ mod tests {
     const DEMO_OVERVIEW_DECRYPTED: &'static str = r#"{"title":"Social"}"#;
 
     #[test]
-    fn test_compute_mac() {
+    fn test_validate() {
         let salt = base64::u8de(DEMO_SALT.as_bytes()).unwrap();
         let derived_key = super::DerivedKey::from_password(&DEMO_PASSWORD, &salt, DEMO_ITERATIONS);
-        let op_data = base64::u8de(DEMO_OVERVIEW_KEY.as_bytes()).unwrap();
-        let op_data_mac = &op_data[op_data.len().saturating_sub(32)..];
-        assert_eq!(derived_key.compute_mac(&op_data), op_data_mac);
+
+        let raw_overview_key_data = base64::u8de(DEMO_OVERVIEW_KEY.as_bytes()).unwrap();
+        let overview_key_data = super::OpData01::new(raw_overview_key_data).unwrap();
+
+        assert!(overview_key_data.validate(&derived_key));
     }
 
     #[test]
     fn test_decrypt() {
         let salt = base64::u8de(DEMO_SALT.as_bytes()).unwrap();
         let derived_key = super::DerivedKey::from_password(&DEMO_PASSWORD, &salt, DEMO_ITERATIONS);
-        let op_data = base64::u8de(DEMO_OVERVIEW_KEY.as_bytes()).unwrap();
-        let overview_key = super::MainKey::from_encrypted_data(&derived_key, &op_data);
-        let overview_op_data = base64::u8de(DEMO_OVERVIEW.as_bytes()).unwrap();
-        let overview_op_data_mac = &overview_op_data[overview_op_data.len().saturating_sub(32)..];
-        assert_eq!(overview_key.compute_mac(&overview_op_data), overview_op_data_mac);
-        let overview_decrypted = overview_key.decrypt(&overview_op_data);
-        assert_eq!(overview_decrypted, DEMO_OVERVIEW_DECRYPTED.as_bytes());
+
+        let raw_overview_key_data = base64::u8de(DEMO_OVERVIEW_KEY.as_bytes()).unwrap();
+        let overview_key_data = super::OpData01::new(raw_overview_key_data).unwrap();
+        let overview_key = super::MainKey::from_op_data(&derived_key, &overview_key_data);
+
+        let raw_overview_data = base64::u8de(DEMO_OVERVIEW.as_bytes()).unwrap();
+        let overview_data = super::OpData01::new(raw_overview_data).unwrap();
+
+        assert!(overview_data.validate(&overview_key));
+
+        let overview = overview_data.decrypt(&overview_key);
+
+        assert_eq!(overview, DEMO_OVERVIEW_DECRYPTED.as_bytes());
     }
 }
