@@ -4,14 +4,15 @@ use std::io::{self, Read, Result as IoResult};
 use std::path::Path;
 
 use json_value_ext::JsonValueExt;
+use op_vault::op_data_01::OpData01;
 
 #[derive(Clone, Debug)]
 pub struct LockedProfile {
     created_at: u64,
     iterations: u64,
     last_updated_by: String,
-    master_key: String,
-    overview_key: String,
+    master_key: OpData01,
+    overview_key: OpData01,
     profile_name: String,
     salt: String,
     updated_at: u64,
@@ -31,8 +32,8 @@ impl LockedProfile {
             created_at: try!(v.retrieve("createdAt", |v| v.as_u64())),
             iterations: try!(v.retrieve("iterations", |v| v.as_u64())),
             last_updated_by: try!(v.retrieve("lastUpdatedBy", |v| v.as_owned_string())),
-            master_key: try!(v.retrieve("masterKey", |v| v.as_owned_string())),
-            overview_key: try!(v.retrieve("overviewKey", |v| v.as_owned_string())),
+            master_key: try!(v.retrieve("masterKey", |v| v.as_op_data_01())),
+            overview_key: try!(v.retrieve("overviewKey", |v| v.as_op_data_01())),
             profile_name: try!(v.retrieve("profileName", |v| v.as_owned_string())),
             salt: try!(v.retrieve("salt", |v| v.as_owned_string())),
             updated_at: try!(v.retrieve("updatedAt", |v| v.as_u64())),
